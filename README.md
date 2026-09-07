@@ -2,6 +2,8 @@
 
 **Background remover. For free!**
 
+**[Open the app](https://tommfr38.com/cutout/)**
+
 Cutout removes the background from a photo directly in your browser. There is
 no login, no subscription, no credits and no watermark, and nothing to
 install. Your image never leaves your device: the models are downloaded once
@@ -16,6 +18,14 @@ and run locally.
 - Transparent, solid-colour or photo backgrounds
 - Full-resolution PNG (with transparency), WebP or JPG download
 - Works on desktop and mobile
+
+## Hosting
+
+The live site is a GitHub Pages project site, built and deployed by
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) on every push to
+`main`. `npm run build:pages` produces that static export; `npm run build`
+produces the server-rendered Cloudflare Workers build instead, which adds the
+cross-origin isolation headers that Pages cannot set.
 
 ## Development
 
