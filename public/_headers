@@ -1,0 +1,15 @@
+# Cross-origin isolation, so the in-browser model runtime may use threads.
+# These must apply to every response, including the worker script and the ONNX
+# Runtime files: a dedicated worker's own script has to carry them when the
+# page that creates it is cross-origin isolated.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+
+# Content-hashed assets never change.
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Model runtime binaries are versioned with the app, not content-hashed.
+/ort/*
+  Cache-Control: public, max-age=86400
