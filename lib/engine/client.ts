@@ -6,6 +6,7 @@
  */
 // oxlint-disable-next-line import/default -- Vite's `?worker` suffix provides the default export.
 import CutoutWorker from './worker.ts?worker';
+import { nativeBridge } from './native';
 import type {
   Device,
   ProgressInfo,
@@ -102,7 +103,21 @@ export class ModelClient {
     return this.pending.size > 0;
   }
 
-  removeBackground(image: RgbImage, onProgress?: (p: ProgressInfo) => void) {
+  /**
+   * In the desktop app this runs natively and the image must already be the
+   * square the model expects; see `autoModelInput`.
+   */
+  async removeBackground(image: RgbImage, onProgress?: (p: ProgressInfo) => void) {
+    const native = nativeBridge();
+    if (native) {
+      const res = await native.removeBackground(image.data);
+      return {
+        data: new Uint8ClampedArray(res.mask),
+        width: res.width,
+        height: res.height,
+        ms: res.ms,
+      } satisfies MaskResult;
+    }
     const id = this.nextId++;
     return this.send<MaskResult>({ type: 'auto', id, image }, [image.data.buffer], onProgress);
   }

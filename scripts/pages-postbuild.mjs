@@ -13,7 +13,7 @@ import { cpSync, existsSync, readdirSync, renameSync, rmSync, writeFileSync } fr
 import { join } from 'node:path';
 
 const outDir = 'dist/client';
-const prefix = (process.env.GITHUB_PAGES_PATH ?? '/cutout').replace(/^\/+|\/+$/g, '');
+const prefix = (process.env.STATIC_ASSET_PREFIX ?? '').replace(/^\/+|\/+$/g, '');
 const nested = join(outDir, prefix);
 
 if (prefix && existsSync(nested)) {

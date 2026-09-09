@@ -1,5 +1,6 @@
 import { ArrowUpRight, Code2, Scissors } from 'lucide-react';
 import Link from 'next/link';
+import DesktopDownload from '@/components/site/DesktopDownload';
 import Editor from '@/components/editor/Editor';
 import { SOURCE_URL } from '@/lib/site/links';
 
@@ -16,9 +17,12 @@ export default function Home() {
           </span>
           cutout<span className="brand-dot">.</span>
         </Link>
-        <a className="source" href={SOURCE_URL} target="_blank" rel="noreferrer">
-          <Code2 size={18} /> GitHub <ArrowUpRight size={15} />
-        </a>
+        <div className="topbar-actions">
+          <a className="source" href={SOURCE_URL} target="_blank" rel="noreferrer">
+            <Code2 size={18} /> GitHub <ArrowUpRight size={15} />
+          </a>
+          <DesktopDownload />
+        </div>
       </header>
       <section className="intro">
         <div>

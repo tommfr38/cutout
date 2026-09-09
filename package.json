@@ -8,12 +8,14 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build && node scripts/prune-bundled-ort.mjs",
-    "build:pages": "GITHUB_PAGES=1 vinext build && node scripts/pages-postbuild.mjs && node scripts/prune-bundled-ort.mjs",
+    "build:pages": "STATIC_EXPORT=1 STATIC_ASSET_PREFIX=/cutout npm run build:static",
+    "build:desktop-ui": "STATIC_EXPORT=1 npm run build:static",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint",
     "format": "oxfmt",
     "prepare-ort": "node scripts/prepare-ort.mjs",
-    "postinstall": "node scripts/prepare-ort.mjs"
+    "postinstall": "node scripts/prepare-ort.mjs",
+    "build:static": "vinext build && node scripts/pages-postbuild.mjs && node scripts/prune-bundled-ort.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

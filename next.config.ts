@@ -1,26 +1,28 @@
 import type { NextConfig } from 'next';
 
 /**
- * Two deployment targets.
+ * Three ways this app is built.
  *
- * By default the app is server-rendered (Cloudflare Workers) and sets the
+ * By default it is server-rendered (Cloudflare Workers) and sets the
  * cross-origin isolation headers, which let the model runtime use threads
  * where the browser allows it.
  *
- * With GITHUB_PAGES=1 it is exported as static files instead. GitHub Pages
- * cannot set response headers, so the page is not cross-origin isolated and
- * inference runs on one thread. That is what Chrome does anyway; see
- * docs/MODELS.md. GITHUB_PAGES_PATH is the subpath the site is served from,
- * which for a project site is the repository name.
+ * With STATIC_EXPORT=1 it becomes a folder of static files instead, used both
+ * for GitHub Pages and for the interface bundled into the desktop app. Pages
+ * cannot set response headers, so that build is not cross-origin isolated and
+ * inference runs on one thread, which is what Chrome does anyway; see
+ * docs/MODELS.md. STATIC_ASSET_PREFIX is the subpath the site is served from,
+ * which for a GitHub Pages project site is the repository name, and which the
+ * desktop app leaves empty because it serves from a root.
  */
-const isGitHubPages = process.env.GITHUB_PAGES === '1';
-const pagesPath = process.env.GITHUB_PAGES_PATH ?? '/cutout';
+const staticExport = process.env.STATIC_EXPORT === '1';
+const assetPrefix = process.env.STATIC_ASSET_PREFIX ?? '';
 
-const nextConfig: NextConfig = isGitHubPages
+const nextConfig: NextConfig = staticExport
   ? {
       output: 'export',
-      assetPrefix: pagesPath,
       images: { unoptimized: true },
+      ...(assetPrefix ? { assetPrefix } : {}),
     }
   : {
       async headers() {

@@ -36,6 +36,7 @@ import {
   MAX_PIXELS_DESKTOP,
   MAX_PIXELS_MOBILE,
   MODEL_SIDE,
+  autoModelInput,
   baseName,
   downloadBlob,
   exportImage,
@@ -380,7 +381,7 @@ export default function Editor() {
       setNotice(null);
       setBusy({ label: 'Removing background…' });
       try {
-        const res = await client().removeBackground(modelImage(doc.rgba), (p) =>
+        const res = await client().removeBackground(autoModelInput(doc.rgba), (p) =>
           setBusy(progressToBusy(p, 'Removing background…')),
         );
         if (docRef.current !== doc) return;

@@ -55,6 +55,19 @@ back to a single thread when they fail, which is what happens in Chrome today.
 Moving inference to the main thread would restore threads but freeze the
 interface for the whole run, so the worker keeps it.
 
+## The desktop app
+
+The desktop app runs the same ormbg model through the native ONNX Runtime
+build (`onnxruntime-node`) instead of WebAssembly, in an Electron utility
+process. That avoids the thread limit above entirely and takes about 0.8
+seconds per image rather than 6.4.
+
+Two details are worth knowing if you touch that code. The native session is
+created fresh for every image, because reusing one across runs crashes
+Electron's Node build, and creation costs about 40 ms against 750 ms of
+inference. And the renderer hands the process an exact 1024 x 1024 square,
+since preprocessing happens in the browser's canvas rather than in Node.
+
 ## Measurements
 
 Apple Silicon laptop, Chromium 148, one 1024 × 683 photo, WebAssembly backend,

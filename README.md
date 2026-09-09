@@ -2,12 +2,14 @@
 
 **Background remover. For free!**
 
-**[Open the app](https://tommfr38.com/cutout/)**
+**[Open the app](https://tommfr38.com/cutout/)** or install it for
+[macOS](https://github.com/tommfr38/cutout/releases/latest/download/Cutout-mac-universal.dmg)
+or [Windows](https://github.com/tommfr38/cutout/releases/latest/download/Cutout-windows-x64-setup.exe).
 
 Cutout removes the background from a photo directly in your browser. There is
-no login, no subscription, no credits and no watermark, and nothing to
-install. Your image never leaves your device: the models are downloaded once
-and run locally.
+no login, no subscription, no credits and no watermark, and nothing you have
+to install. Your image never leaves your device: the models are downloaded
+once and run locally. A desktop app is there if you want it faster.
 
 ## Features
 
@@ -18,6 +20,38 @@ and run locally.
 - Transparent, solid-colour or photo backgrounds
 - Full-resolution PNG (with transparency), WebP or JPG download
 - Works on desktop and mobile
+- Optional desktop app for macOS and Windows, several times faster
+
+## The desktop app
+
+[`desktop/`](desktop) wraps the same interface in Electron and swaps the
+WebAssembly background remover for the native ONNX Runtime build, which is
+about eight times faster. Everything else, including the Smart Brush, is the
+code that runs on the web.
+
+| Where automatic removal runs | Time per image |
+| --- | --- |
+| Browser, WebAssembly, one thread | about 6.4 seconds |
+| Desktop app, native | about 0.8 seconds |
+
+Measured on an Apple silicon laptop with a 1024 x 683 photo, so treat them as
+a guide rather than a promise.
+
+The model is bundled into the installer, so the desktop app removes backgrounds
+with no network at all. The Smart Brush still downloads its own model the first
+time you use it.
+
+To run it from a checkout:
+
+```bash
+npm ci && npm run build:desktop-ui
+cd desktop && npm ci && node scripts/fetch-model.mjs && npm start
+```
+
+`npx electron-builder --mac` or `--win` produces the installers.
+[`.github/workflows/release.yml`](.github/workflows/release.yml) does that on
+every `v*` tag and attaches them to the release. The builds are not signed, so
+macOS and Windows both warn on first launch.
 
 ## Hosting
 

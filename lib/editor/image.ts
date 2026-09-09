@@ -1,3 +1,4 @@
+import { isDesktopApp } from '@/lib/engine/native';
 import type { RgbImage } from '@/lib/engine/types';
 import type { Mask } from '@/lib/mask/ops';
 
@@ -83,6 +84,32 @@ export function modelImage(rgba: ImageData): RgbImage {
   ctx.drawImage(src, 0, 0, w, h);
   const out = ctx.getImageData(0, 0, w, h);
   return { data: out.data, width: w, height: h };
+}
+
+/**
+ * The automatic model takes a fixed square, so the image is stretched to fit
+ * and the resulting mask is stretched back when it is applied.
+ */
+export function squareModelImage(rgba: ImageData, side = MODEL_SIDE): RgbImage {
+  const src = new OffscreenCanvas(rgba.width, rgba.height);
+  src.getContext('2d')!.putImageData(rgba, 0, 0);
+  const dst = new OffscreenCanvas(side, side);
+  const ctx = dst.getContext('2d', { willReadFrequently: true })!;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, side, side);
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(src, 0, 0, side, side);
+  const out = ctx.getImageData(0, 0, side, side);
+  return { data: out.data, width: side, height: side };
+}
+
+/**
+ * Input for automatic removal. The native engine takes the square directly;
+ * the WebAssembly one is handed the aspect-correct image and squares it itself
+ * as part of preprocessing.
+ */
+export function autoModelInput(rgba: ImageData): RgbImage {
+  return isDesktopApp() ? squareModelImage(rgba) : modelImage(rgba);
 }
 
 export type Background =

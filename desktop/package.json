@@ -1,0 +1,89 @@
+{
+  "name": "cutout-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cutout desktop app",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "icon": "electron scripts/make-icon.js",
+    "smoke": "electron ."
+  },
+  "dependencies": {
+    "onnxruntime-node": "1.21.0"
+  },
+  "devDependencies": {
+    "electron": "^34.2.0",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "com.tommfr38.cutout",
+    "productName": "Cutout",
+    "copyright": "Cutout contributors",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "npmRebuild": false,
+    "files": [
+      "main.js",
+      "preload.js",
+      "inference.js",
+      "smoke.js",
+      "package.json",
+      "node_modules/**/*",
+      "!node_modules/onnxruntime-node/bin/napi-v3/linux/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist/client",
+        "to": "ui"
+      },
+      {
+        "from": "models",
+        "to": "models"
+      }
+    ],
+    "asarUnpack": [
+      "**/node_modules/onnxruntime-node/**"
+    ],
+    "mac": {
+      "category": "public.app-category.graphics-design",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "identity": null,
+      "files": [
+        "!node_modules/onnxruntime-node/bin/napi-v3/win32/**"
+      ],
+      "artifactName": "Cutout-mac-universal.${ext}"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "files": [
+        "!node_modules/onnxruntime-node/bin/napi-v3/darwin/**"
+      ],
+      "artifactName": "Cutout-windows-x64-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Cutout"
+    }
+  }
+}

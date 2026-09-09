@@ -1,0 +1,72 @@
+name: Build desktop apps
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: --mac
+            artifact: Cutout-mac-universal.dmg
+          - os: windows-latest
+            platform: --win
+            artifact: Cutout-windows-x64-setup.exe
+    runs-on: ${{ matrix.os }}
+    env:
+      # The interface is bundled as static files; the desktop app serves them
+      # from its own root, so there is no asset prefix.
+      STATIC_EXPORT: '1'
+      # Nothing to sign with, so do not go looking for a certificate.
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build the interface
+        run: |
+          npm ci
+          npm run build:static
+
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Fetch the model
+        working-directory: desktop
+        run: node scripts/fetch-model.mjs
+
+      - name: Package
+        working-directory: desktop
+        run: npx electron-builder ${{ matrix.platform }} --publish never
+
+      - name: Check the packaged app starts and removes a background
+        if: matrix.os == 'macos-latest'
+        working-directory: desktop
+        run: |
+          curl -sL -o /tmp/smoke.jpg "https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/corgi.jpg"
+          CUTOUT_SMOKE_IMAGE=/tmp/smoke.jpg "release/mac-universal/Cutout.app/Contents/MacOS/Cutout" | tee /tmp/smoke.log
+          grep -q '"ok":true' /tmp/smoke.log
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: desktop/release/${{ matrix.artifact }}
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: desktop/release/${{ matrix.artifact }}
+          fail_on_unmatched_files: true
