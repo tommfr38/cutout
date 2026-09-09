@@ -50,13 +50,24 @@ jobs:
         working-directory: desktop
         run: npx electron-builder ${{ matrix.platform }} --publish never
 
-      - name: Check the packaged app starts and removes a background
-        if: matrix.os == 'macos-latest'
+      - name: Check the packaged app removes a background (macOS)
+        if: runner.os == 'macOS'
         working-directory: desktop
         run: |
           curl -sL -o /tmp/smoke.jpg "https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/corgi.jpg"
           CUTOUT_SMOKE_IMAGE=/tmp/smoke.jpg "release/mac-universal/Cutout.app/Contents/MacOS/Cutout" | tee /tmp/smoke.log
           grep -q '"ok":true' /tmp/smoke.log
+
+      - name: Check the packaged app removes a background (Windows)
+        if: runner.os == 'Windows'
+        working-directory: desktop
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/corgi.jpg" -OutFile "$env:TEMP\smoke.jpg"
+          $env:CUTOUT_SMOKE_IMAGE = "$env:TEMP\smoke.jpg"
+          $out = & "release\win-unpacked\Cutout.exe" | Out-String
+          Write-Host $out
+          if ($out -notmatch '"ok":true') { throw "smoke test failed" }
 
       - uses: actions/upload-artifact@v4
         with:
