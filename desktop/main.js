@@ -11,9 +11,10 @@ const UI_SCHEME = 'cutout';
 const UI_ROOT = app.isPackaged
   ? path.join(process.resourcesPath, 'ui')
   : path.join(__dirname, '..', 'dist', 'client');
-const MODEL_PATH = app.isPackaged
-  ? path.join(process.resourcesPath, 'models', 'ormbg-q8.onnx')
-  : path.join(__dirname, 'models', 'ormbg-q8.onnx');
+const MODELS_ROOT = app.isPackaged
+  ? path.join(process.resourcesPath, 'models')
+  : path.join(__dirname, 'models');
+const MODEL_PATH = path.join(MODELS_ROOT, 'ormbg-q8.onnx');
 
 // A standard, secure scheme so the page behaves like it does on the web:
 // absolute paths, workers, fetch and the Cache API all work unchanged.
@@ -104,9 +105,15 @@ app.whenReady().then(() => {
   protocol.handle(UI_SCHEME, (request) => {
     const { pathname } = new URL(request.url);
     const relative = decodeURIComponent(pathname === '/' ? '/index.html' : pathname);
-    // Keep every read inside the bundled interface directory.
-    const target = path.join(UI_ROOT, path.normalize(relative));
-    if (!target.startsWith(UI_ROOT)) {
+    // /models/ serves the bundled Smart Brush files; everything else is the
+    // interface. Both reads are pinned inside their own directory.
+    const isModel = relative.startsWith('/models/');
+    const root = isModel ? MODELS_ROOT : UI_ROOT;
+    const target = path.join(
+      root,
+      path.normalize(isModel ? relative.slice('/models'.length) : relative),
+    );
+    if (!target.startsWith(root)) {
       return new Response('Not found', { status: 404 });
     }
     return net.fetch(pathToFileURL(target).toString());

@@ -37,7 +37,19 @@ export const AUTO_MODEL_ID = 'onnx-community/ormbg-ONNX';
 export const AUTO_DTYPE: 'fp32' | 'q8' | 'fp16' = 'q8';
 export const SMART_MODEL_ID = 'Xenova/slimsam-77-uniform';
 
-env.allowLocalModels = false;
+/**
+ * The desktop app serves its own copies of the model files, so it never
+ * reaches the network. On the web they come from the Hugging Face Hub and the
+ * browser caches them for later visits.
+ */
+const isDesktop = self.location.protocol === 'cutout:';
+if (isDesktop) {
+  env.allowLocalModels = true;
+  env.allowRemoteModels = false;
+  env.localModelPath = `${self.location.origin}/models/`;
+} else {
+  env.allowLocalModels = false;
+}
 env.useBrowserCache = true;
 // Serve the ONNX Runtime WASM binaries ourselves (copied from onnxruntime-web
 // into public/ort by `npm run prepare-ort`) so versions always match and no CDN is needed.

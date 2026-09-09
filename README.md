@@ -37,9 +37,8 @@ code that runs on the web.
 Measured on an Apple silicon laptop with a 1024 x 683 photo, so treat them as
 a guide rather than a promise.
 
-The model is bundled into the installer, so the desktop app removes backgrounds
-with no network at all. The Smart Brush still downloads its own model the first
-time you use it.
+Both models are bundled into the installer, so the whole app works with no
+network at all, including the Smart Brush.
 
 To run it from a checkout:
 

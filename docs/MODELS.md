@@ -62,6 +62,12 @@ build (`onnxruntime-node`) instead of WebAssembly, in an Electron utility
 process. That avoids the thread limit above entirely and takes about 0.8
 seconds per image rather than 6.4.
 
+Both models ship inside the installer, so nothing is downloaded at runtime.
+`scripts/fetch-model.mjs` collects them at build time, keeping the Smart Brush
+files in their repository layout, and the app serves them to the interface
+under `cutout://app/models/`, which is where Transformers.js is pointed when
+it detects that scheme.
+
 Two details are worth knowing if you touch that code. The native session is
 created fresh for every image, because reusing one across runs crashes
 Electron's Node build, and creation costs about 40 ms against 750 ms of
