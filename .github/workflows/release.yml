@@ -27,6 +27,9 @@ jobs:
       STATIC_EXPORT: '1'
       # Nothing to sign with, so do not go looking for a certificate.
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      # Also exercise the Smart Brush, which proves its model really is
+      # bundled rather than quietly downloaded.
+      CUTOUT_SMOKE_SMART: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
