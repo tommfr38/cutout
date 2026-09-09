@@ -72,6 +72,23 @@ jobs:
           Write-Host $out
           if ($out -notmatch '"ok":true') { throw "smoke test failed" }
 
+      - name: Install from the .exe and run the installed app offline (Windows)
+        if: runner.os == 'Windows'
+        working-directory: desktop
+        shell: pwsh
+        run: |
+          Start-Process -FilePath "release\Cutout-windows-x64-setup.exe" -ArgumentList "/S","/D=C:\CutoutTest" -Wait
+          if (!(Test-Path "C:\CutoutTest\Cutout.exe")) { throw "the installer did not place Cutout.exe" }
+          Invoke-WebRequest -Uri "https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/corgi.jpg" -OutFile "$env:TEMP\installed.jpg"
+          $env:CUTOUT_SMOKE_IMAGE = "$env:TEMP\installed.jpg"
+          # Every request goes to a dead proxy, so this proves the models are
+          # bundled rather than fetched.
+          $out = & "C:\CutoutTest\Cutout.exe" --proxy-server=127.0.0.1:1 "--proxy-bypass-list=<-loopback>" | Out-String
+          Write-Host $out
+          $passes = ([regex]::Matches($out, '"ok":true')).Count
+          if ($passes -lt 2) { throw "installed app failed offline: only $passes checks passed" }
+          Write-Host "installed app passed both checks with no network"
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
