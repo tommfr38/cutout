@@ -5,7 +5,7 @@
  */
 export interface NativeBridge {
   platform: string;
-  removeBackground(rgba: Uint8ClampedArray): Promise<{
+  removeBackground(rgba: Uint8ClampedArray, which?: 'primary' | 'backup'): Promise<{
     mask: Uint8Array;
     width: number;
     height: number;

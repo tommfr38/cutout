@@ -6,6 +6,7 @@
  */
 // oxlint-disable-next-line import/default -- Vite's `?worker` suffix provides the default export.
 import CutoutWorker from './worker.ts?worker';
+import { needsSecondOpinion, pickMask } from '@/lib/mask/quality';
 import { nativeBridge } from './native';
 import type {
   Device,
@@ -22,6 +23,13 @@ export interface MaskResult {
   height: number;
   ms: number;
   score?: number;
+}
+
+export interface RefineResult {
+  alpha: Uint8ClampedArray;
+  fg: Uint8ClampedArray | null;
+  plainBackdrop: boolean;
+  ms: number;
 }
 
 type Pending = {
@@ -77,6 +85,7 @@ export class ModelClient {
       case 'auto-result':
       case 'segment-result':
       case 'embed-result':
+      case 'refine-result':
         this.pending.delete(msg.id);
         p.resolve(msg);
         break;
@@ -110,13 +119,22 @@ export class ModelClient {
   async removeBackground(image: RgbImage, onProgress?: (p: ProgressInfo) => void) {
     const native = nativeBridge();
     if (native) {
-      const res = await native.removeBackground(image.data);
-      return {
-        data: new Uint8ClampedArray(res.mask),
-        width: res.width,
-        height: res.height,
-        ms: res.ms,
-      } satisfies MaskResult;
+      // Same decision as the web worker: a second opinion when the answer looks off.
+      const started = performance.now();
+      const first = await native.removeBackground(image.data, 'primary');
+      let mask = new Uint8ClampedArray(first.mask);
+      let used = 'primary';
+      if (needsSecondOpinion(image.data, first.width, first.height, mask)) {
+        const second = await native.removeBackground(image.data, 'backup');
+        const backup = new Uint8ClampedArray(second.mask);
+        if (pickMask(image.data, first.width, first.height, mask, backup) === 'backup') {
+          mask = backup;
+          used = 'backup';
+        }
+      }
+      const ms = performance.now() - started;
+      console.info(`[cutout] background removed in ${Math.round(ms)} ms (native, ${used} model)`);
+      return { data: mask, width: first.width, height: first.height, ms } satisfies MaskResult;
     }
     const id = this.nextId++;
     return this.send<MaskResult>({ type: 'auto', id, image }, [image.data.buffer], onProgress);
@@ -129,6 +147,16 @@ export class ModelClient {
     const img = image();
     await this.send({ type: 'embed', id, image: img }, [img.data.buffer], onProgress);
     this.embeddedKey = key;
+  }
+
+  /**
+   * Combines the model's mask with what can be measured from a plain backdrop.
+   * Runs at full resolution in the worker. `image` is transferred, so pass a copy.
+   */
+  refine(image: RgbImage, mask: MaskResult) {
+    const id = this.nextId++;
+    const m = { data: new Uint8ClampedArray(mask.data), width: mask.width, height: mask.height };
+    return this.send<RefineResult>({ type: 'refine', id, image, mask: m }, [image.data.buffer, m.data.buffer]);
   }
 
   segment(prompt: SmartPrompt) {

@@ -27,6 +27,14 @@ export type WorkerRequest =
   | { type: 'auto'; id: number; image: RgbImage }
   | { type: 'embed'; id: number; image: RgbImage }
   | { type: 'segment'; id: number; prompt: SmartPrompt }
+  | {
+      type: 'refine';
+      id: number;
+      /** Full-resolution image. */
+      image: RgbImage;
+      /** The model's opacity at its own resolution, 0..255. */
+      mask: { data: Uint8ClampedArray; width: number; height: number };
+    }
   | { type: 'dispose' };
 
 export interface ProgressInfo {
@@ -62,6 +70,16 @@ export type WorkerResponse =
       width: number;
       height: number;
       score: number;
+      ms: number;
+    }
+  | {
+      type: 'refine-result';
+      id: number;
+      /** Opacity 0..255 at the image's full resolution. */
+      alpha: Uint8ClampedArray;
+      /** Colours with the backdrop's tint removed from soft edges, if a plain backdrop was found. */
+      fg: Uint8ClampedArray | null;
+      plainBackdrop: boolean;
       ms: number;
     }
   | { type: 'error'; id: number; message: string; recoverable: boolean };

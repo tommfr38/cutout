@@ -52,5 +52,16 @@
     "typescript/no-require-imports": "error",
     "typescript/no-unnecessary-type-constraint": "error",
     "typescript/no-unsafe-function-type": "error"
-  }
+  },
+  "overrides": [
+    {
+      "files": [
+        "desktop/**/*.js",
+        "bench/harness/*.cjs"
+      ],
+      "rules": {
+        "typescript/no-require-imports": "off"
+      }
+    }
+  ]
 }

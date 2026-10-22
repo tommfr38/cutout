@@ -14,8 +14,9 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "prepare-ort": "node scripts/prepare-ort.mjs",
-    "postinstall": "node scripts/prepare-ort.mjs",
-    "build:static": "vinext build && node scripts/pages-postbuild.mjs && node scripts/prune-bundled-ort.mjs"
+    "postinstall": "node scripts/prepare-ort.mjs && node scripts/fetch-models.mjs",
+    "build:static": "vinext build && node scripts/pages-postbuild.mjs && node scripts/prune-bundled-ort.mjs",
+    "fetch-models": "node scripts/fetch-models.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

@@ -18,6 +18,12 @@ const root = join(here, '..', 'models');
  */
 const FILES = [
   {
+    // Same 8-bit isnet the website serves, from the repository's models-1 release.
+    to: 'isnet-general-use/onnx/model_quantized.onnx',
+    url: 'https://github.com/tommfr38/cutout/releases/download/models-1/isnet-general-use-q8.onnx',
+    minBytes: 46_000_000,
+  },
+  {
     to: 'ormbg-q8.onnx',
     url: 'https://huggingface.co/onnx-community/ormbg-ONNX/resolve/main/onnx/model_quantized.onnx',
     minBytes: 40_000_000,

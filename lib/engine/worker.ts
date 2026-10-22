@@ -12,6 +12,9 @@ import {
   Tensor,
   env,
 } from '@huggingface/transformers';
+import { scaleMask } from '@/lib/mask/ops';
+import { needsSecondOpinion, pickMask, toSquare } from '@/lib/mask/quality';
+import { refineWithBackdrop } from '@/lib/mask/separate';
 import type {
   Device,
   ProgressInfo,
@@ -27,46 +30,47 @@ if ((globalThis as unknown as { __cutoutWindowShim?: boolean }).__cutoutWindowSh
 }
 
 /**
- * Automatic removal uses ormbg (IS-Net, Apache-2.0). BiRefNet_lite's ONNX
- * export was evaluated first but crashes ONNX Runtime WASM with std::bad_alloc
- * (its deform_conv2d emulation allocates hundreds of MB per node) and the
- * WebGPU re-export produced NaN output on the test GPU. See docs/MODELS.md.
+ * Automatic removal. isnet-general-use (the DIS authors' general-purpose
+ * IS-Net, Apache-2.0) leads; it handles objects, animals and illustrations far
+ * better than the people-focused ormbg. ormbg stays as a backup for the rare
+ * image where isnet finds almost nothing, such as a logo that fills the frame.
+ * The site serves its own 8-bit copy of isnet; see docs/MODELS.md.
  */
-export const AUTO_MODEL_ID = 'onnx-community/ormbg-ONNX';
-/** 'fp32' (176 MB) or 'q8' (44 MB); both run at the same speed on WASM. */
-export const AUTO_DTYPE: 'fp32' | 'q8' | 'fp16' = 'q8';
+const AUTO_MODELS = {
+  primary: { id: 'isnet-general-use', normalize: true },
+  backup: { id: 'onnx-community/ormbg-ONNX', normalize: false },
+} as const;
 export const SMART_MODEL_ID = 'Xenova/slimsam-77-uniform';
 
 /**
- * The desktop app serves its own copies of the model files, so it never
- * reaches the network. On the web they come from the Hugging Face Hub and the
- * browser caches them for later visits.
+ * The site's base URL. Built, the worker is served from `<base>/_next/static/`;
+ * the dev server serves it from its source path instead, at the site root.
+ */
+function siteBase(): string {
+  const here = self.location.href;
+  const marker = here.lastIndexOf('/_next/');
+  return marker === -1 ? `${self.location.origin}/` : here.slice(0, marker + 1);
+}
+
+/**
+ * Models the app ships itself (the automatic remover on the web; everything
+ * in the desktop app) are served from `<base>/models/`. Anything else comes
+ * from the Hugging Face Hub, except in the desktop app, which never goes
+ * online. Downloads are cached by the browser for later visits.
  */
 const isDesktop = self.location.protocol === 'cutout:';
-if (isDesktop) {
-  env.allowLocalModels = true;
-  env.allowRemoteModels = false;
-  env.localModelPath = `${self.location.origin}/models/`;
-} else {
-  env.allowLocalModels = false;
-}
+env.allowLocalModels = true;
+env.localModelPath = new URL('models/', siteBase()).href;
+env.allowRemoteModels = !isDesktop;
 env.useBrowserCache = true;
 // Serve the ONNX Runtime WASM binaries ourselves (copied from onnxruntime-web
 // into public/ort by `npm run prepare-ort`) so versions always match and no CDN is needed.
 /**
- * Where the ONNX Runtime binaries live. The worker script is served from
- * `<base>/_next/static/`, so trimming that suffix gives the site's base URL.
- * Deriving it this way keeps the app working both at a domain root and under
- * a subpath, such as a GitHub Pages project site.
+ * ONNX Runtime binaries, served from the site itself. Deriving the path from
+ * the worker's own URL keeps it working at a domain root and under a subpath,
+ * such as a GitHub Pages project site.
  */
-function ortPath(): string {
-  const here = self.location.href;
-  const marker = here.lastIndexOf('/_next/');
-  const base = marker === -1 ? new URL('.', here).href : here.slice(0, marker + 1);
-  return new URL('ort/', base).href;
-}
-
-const ORT_PATH = ortPath();
+const ORT_PATH = new URL('ort/', siteBase()).href;
 env.backends.onnx.wasm!.wasmPaths = ORT_PATH;
 
 /**
@@ -186,93 +190,46 @@ function toRawImage(img: RgbImage): RawImage {
 type AutoBundle = {
   model: Awaited<ReturnType<typeof AutoModel.from_pretrained>>;
   processor: Awaited<ReturnType<typeof AutoProcessor.from_pretrained>>;
-  device: Device;
 };
-let autoBundle: Promise<AutoBundle> | null = null;
+type AutoKind = keyof typeof AUTO_MODELS;
+const autoBundles = new Map<AutoKind, Promise<AutoBundle>>();
 
-async function loadAuto(id: number): Promise<AutoBundle> {
-  if (autoBundle) return autoBundle;
-  autoBundle = (async () => {
+function loadAuto(id: number, kind: AutoKind): Promise<AutoBundle> {
+  const cached = autoBundles.get(kind);
+  if (cached) return cached;
+  const bundle = (async () => {
     await configureThreads();
-    // ormbg uses MaxPool with ceil_mode, which ONNX Runtime's WebGPU backend
-    // rejects, so this model always runs on (multi-threaded) WASM.
-    const preferred = 'wasm' as Device;
-    const report = progressReporter(id, 'auto');
-    const attempt = async (device: Device): Promise<AutoBundle> => {
-      const [model, processor] = await Promise.all([
-        AutoModel.from_pretrained(AUTO_MODEL_ID, {
-          device,
-          dtype: AUTO_DTYPE,
-          progress_callback: report,
-        }),
-        AutoProcessor.from_pretrained(AUTO_MODEL_ID, {}),
-      ]);
-      return { model, processor, device };
-    };
-    try {
-      return await attempt(preferred);
-    } catch (err) {
-      if (preferred === 'webgpu') {
-        console.warn('[cutout] WebGPU load failed, falling back to WASM', err);
-        return attempt('wasm');
-      }
-      throw err;
-    }
+    const modelId = AUTO_MODELS[kind].id;
+    const [model, processor] = await Promise.all([
+      AutoModel.from_pretrained(modelId, {
+        device: 'wasm',
+        dtype: 'q8',
+        progress_callback: progressReporter(id, 'auto'),
+      }),
+      AutoProcessor.from_pretrained(modelId, {}),
+    ]);
+    return { model, processor };
   })();
-  autoBundle.catch(() => {
-    autoBundle = null;
-  });
-  return autoBundle;
+  bundle.catch(() => autoBundles.delete(kind));
+  autoBundles.set(kind, bundle);
+  return bundle;
 }
 
-/**
- * Runs `fn` and, if it fails on WebGPU, drops the GPU session and retries
- * once on WASM. Some browsers accept the GPU model at load time but fail
- * when a kernel is compiled during the first run.
- */
-async function withFallback<T>(device: Device, reset: () => void, fn: () => Promise<T>, retry: () => Promise<T>) {
-  try {
-    return await fn();
-  } catch (err) {
-    if (device === 'webgpu' && !forceWasm) {
-      console.warn('[cutout] WebGPU inference failed, retrying on WASM', err);
-      forceWasm = true;
-      reset();
-      return retry();
-    }
-    throw err;
-  }
-}
-
-async function runAuto(id: number, image: RgbImage): Promise<void> {
-  const { model, processor, device } = await loadAuto(id);
-  post({ type: 'device', device });
-  return withFallback(
-    device,
-    () => {
-      autoBundle = null;
-      void model.dispose();
-    },
-    () => runAutoWith(id, image, model, processor),
-    () => runAuto(id, image),
-  );
-}
-
-async function runAutoWith(
-  id: number,
-  image: RgbImage,
-  model: AutoBundle['model'],
-  processor: AutoBundle['processor'],
-) {
+/** Runs one automatic model and returns its opacity, 0..255, at model size. */
+async function predict(id: number, kind: AutoKind, image: RgbImage) {
+  const { model, processor } = await loadAuto(id, kind);
+  post({ type: 'device', device: 'wasm' });
   post({ type: 'progress', id, info: { stage: 'run', model: 'auto' } });
-  const t0 = performance.now();
-  const raw = toRawImage(image);
-  const { pixel_values } = await processor(raw);
-  const outputs = (await model({ pixel_values })) as Record<string, Tensor>;
+  const { pixel_values } = await processor(toRawImage(image));
+  // Exports differ in what they call their one input (`pixel_values`,
+  // `input_image`), so use whatever this model declares.
+  const session = (model as unknown as { sessions?: Record<string, { inputNames?: string[] }> }).sessions?.model;
+  const inputName = session?.inputNames?.[0] ?? 'pixel_values';
+  const outputs = (await model({ [inputName]: pixel_values })) as Record<string, Tensor>;
   const output = outputs[Object.keys(outputs)[0]]; // [1, 1, H, W]
   const [, , h, w] = output.dims;
   const data = output.data as Float32Array;
-  // Some exports apply the sigmoid inside the graph, others return logits.
+  // Some exports end in a sigmoid, others return logits.
   let logits = false;
   for (let i = 0; i < data.length; i++) {
     if (data[i] < -1e-5 || data[i] > 1 + 1e-5) {
@@ -280,16 +237,75 @@ async function runAutoWith(
       break;
     }
   }
-  const mask = new Uint8ClampedArray(h * w);
-  for (let i = 0; i < mask.length; i++) {
-    const v = logits ? 1 / (1 + Math.exp(-data[i])) : data[i];
-    mask[i] = v * 255;
+  const values = logits ? Float32Array.from(data, (v) => 1 / (1 + Math.exp(-v))) : Float32Array.from(data);
+  // isnet's output is meant to be stretched to the full 0..1 range.
+  if (AUTO_MODELS[kind].normalize) {
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const v of values) {
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+    const span = hi - lo || 1;
+    for (let i = 0; i < values.length; i++) values[i] = (values[i] - lo) / span;
   }
+  const mask = Uint8ClampedArray.from(values, (v) => v * 255);
   pixel_values.dispose();
   output.dispose();
+  return { mask, width: w, height: h };
+}
+
+async function runAuto(id: number, image: RgbImage): Promise<void> {
+  const t0 = performance.now();
+  let result = await predict(id, 'primary', image);
+  // A second opinion when the answer looks off: almost nothing found, or an
+  // outline that cuts through flat colour instead of following edges.
+  const square = toSquare(image, result.width);
+  let used = 'primary';
+  if (needsSecondOpinion(square, result.width, result.height, result.mask)) {
+    const backup = await predict(id, 'backup', image);
+    if (pickMask(square, result.width, result.height, result.mask, backup.mask) === 'backup') {
+      result = backup;
+      used = 'backup';
+    }
+  }
   const ms = performance.now() - t0;
-  console.info(`[cutout] background removed in ${Math.round(ms)} ms`);
-  post({ type: 'auto-result', id, data: mask, width: w, height: h, ms }, [mask.buffer]);
+  console.info(`[cutout] background removed in ${Math.round(ms)} ms (${used} model)`);
+  post(
+    { type: 'auto-result', id, data: result.mask, width: result.width, height: result.height, ms },
+    [result.mask.buffer],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Refinement against a plain backdrop
+// ---------------------------------------------------------------------------
+
+function runRefine(
+  id: number,
+  image: RgbImage,
+  mask: { data: Uint8ClampedArray; width: number; height: number },
+) {
+  const t0 = performance.now();
+  const { width, height, data } = image;
+  const scaled = scaleMask(mask, width, height);
+  const ml = Float32Array.from(scaled, (v) => v / 255);
+  const refined = refineWithBackdrop(data, width, height, ml);
+  const ms = performance.now() - t0;
+  console.info(`[cutout] edges refined in ${Math.round(ms)} ms: ${refined.note}`);
+  const transfer: Transferable[] = [refined.alpha.buffer];
+  if (refined.fg) transfer.push(refined.fg.buffer);
+  post(
+    {
+      type: 'refine-result',
+      id,
+      alpha: refined.alpha,
+      fg: refined.fg,
+      plainBackdrop: refined.plainBackdrop,
+      ms,
+    },
+    transfer,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -345,6 +361,25 @@ interface Embedding {
   height: number;
 }
 let embedding: Embedding | null = null;
+
+/**
+ * Runs `fn` and, if it fails on WebGPU, drops the GPU session and retries
+ * once on WASM. Some browsers accept the GPU model at load time but fail
+ * when a kernel is compiled during the first run.
+ */
+async function withFallback<T>(device: Device, reset: () => void, fn: () => Promise<T>, retry: () => Promise<T>) {
+  try {
+    return await fn();
+  } catch (err) {
+    if (device === 'webgpu' && !forceWasm) {
+      console.warn('[cutout] WebGPU inference failed, retrying on WASM', err);
+      forceWasm = true;
+      reset();
+      return retry();
+    }
+    throw err;
+  }
+}
 
 async function runEmbed(id: number, image: RgbImage): Promise<void> {
   const { model, processor, device } = await loadSmart(id);
@@ -525,6 +560,7 @@ function describe(err: unknown): string {
       if (req.type === 'auto') await runAuto(req.id, req.image);
       else if (req.type === 'embed') await runEmbed(req.id, req.image);
       else if (req.type === 'segment') await runSegment(req.id, req.prompt);
+      else if (req.type === 'refine') runRefine(req.id, req.image, req.mask);
     } catch (err) {
       console.error('[cutout worker]', err);
       post({ type: 'error', id: req.id, message: describe(err), recoverable: true });

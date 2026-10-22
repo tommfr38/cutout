@@ -13,7 +13,8 @@ once and run locally. A desktop app is there if you want it faster.
 
 ## Features
 
-- Automatic background removal on open
+- Automatic background removal on open, for photos and illustrations, on
+  any colour of backdrop
 - Smart Brush: brush over an object to erase or restore it along its edges
 - Manual erase/restore brush and lasso selection
 - Undo/redo, zoom and pan, hold-to-compare with the original
@@ -32,12 +33,12 @@ code that runs on the web.
 | Where automatic removal runs | Time per image |
 | --- | --- |
 | Browser, WebAssembly, one thread | about 6.4 seconds |
-| Desktop app, native | about 0.8 seconds |
+| Desktop app, native | about 0.7 seconds |
 
-Measured on an Apple silicon laptop with a 1024 x 683 photo, so treat them as
-a guide rather than a promise.
+Measured on an Apple silicon laptop, so treat them as a guide rather than a
+promise.
 
-Both models are bundled into the installer, so the whole app works with no
+All the models are bundled into the installer, so the whole app works with no
 network at all, including the Smart Brush.
 
 To run it from a checkout:
@@ -78,14 +79,18 @@ which copies the ONNX Runtime WebAssembly binaries into `public/ort`.
 - [`lib/engine/worker.ts`](lib/engine/worker.ts) runs the models in a Web
   Worker so the interface stays responsive.
 - [`lib/mask/`](lib/mask) holds the alpha-mask primitives (brush, lasso,
-  model-mask application) and a memory-bounded undo history.
+  model-mask application), a memory-bounded undo history, the backdrop
+  measurement that refines automatic results (`separate.ts`) and the checks
+  that decide when to ask for a second opinion (`quality.ts`).
 - [`components/editor/Editor.tsx`](components/editor/Editor.tsx) is the editor:
   canvas rendering, pointer/touch handling, tools and export.
 
 The original pixels are never modified. Every tool edits a separate alpha
 mask, and the download composites the two at full resolution.
 
-See [docs/MODELS.md](docs/MODELS.md) for the models used and their licenses.
+See [docs/MODELS.md](docs/MODELS.md) for the models, their licenses, how
+automatic removal combines a model with measuring plain backdrops, and the
+benchmark in [`bench/`](bench) that tests it.
 
 ## Limits
 

@@ -14,7 +14,6 @@ const UI_ROOT = app.isPackaged
 const MODELS_ROOT = app.isPackaged
   ? path.join(process.resourcesPath, 'models')
   : path.join(__dirname, 'models');
-const MODEL_PATH = path.join(MODELS_ROOT, 'ormbg-q8.onnx');
 
 // A standard, secure scheme so the page behaves like it does on the web:
 // absolute paths, workers, fetch and the Cache API all work unchanged.
@@ -50,7 +49,7 @@ function inferenceProcess() {
     pending.clear();
     child = null;
   });
-  send('configure', { modelPath: MODEL_PATH }).catch(() => {});
+  send('configure', { modelsRoot: MODELS_ROOT }).catch(() => {});
   return child;
 }
 
@@ -63,8 +62,8 @@ function send(type, payload) {
   });
 }
 
-ipcMain.handle('cutout:remove-background', async (_event, rgba) => {
-  const result = await send('remove-background', { rgba });
+ipcMain.handle('cutout:remove-background', async (_event, rgba, which) => {
+  const result = await send('remove-background', { rgba, which: which === 'backup' ? 'backup' : 'primary' });
   return { mask: result.mask, width: result.width, height: result.height, ms: result.ms };
 });
 
@@ -85,7 +84,7 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
-  win.loadURL(`${UI_SCHEME}://app/index.html`);
+  void win.loadURL(`${UI_SCHEME}://app/index.html`);
   // Optional self-check; see smoke.js.
   if (process.env.CUTOUT_SMOKE_IMAGE) {
     win.webContents.once('did-finish-load', async () => {
@@ -95,13 +94,13 @@ function createWindow() {
   }
   // Anything the page tries to open externally goes to the real browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:$/.test(new URL(url).protocol)) shell.openExternal(url);
+    if (/^https?:$/.test(new URL(url).protocol)) void shell.openExternal(url);
     return { action: 'deny' };
   });
   return win;
 }
 
-app.whenReady().then(() => {
+void app.whenReady().then(() => {
   protocol.handle(UI_SCHEME, (request) => {
     const { pathname } = new URL(request.url);
     const relative = decodeURIComponent(pathname === '/' ? '/index.html' : pathname);

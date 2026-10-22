@@ -37,7 +37,7 @@ line(14.8, 14.8, 20, 20);
 window.__png = document.getElementById('c').toDataURL('image/png');
 </script></body>`;
 
-app.whenReady().then(async () => {
+void app.whenReady().then(async () => {
   const win = new BrowserWindow({ show: false, width: 1024, height: 1024 });
   await win.loadURL('data:text/html;base64,' + Buffer.from(HTML).toString('base64'));
   const dataUrl = await win.webContents.executeJavaScript('window.__png');

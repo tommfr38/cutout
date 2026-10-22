@@ -142,6 +142,7 @@ export async function exportImage(
   mask: Mask,
   bg: Background,
   format: ExportFormat,
+  fg: Uint8ClampedArray | null = null,
 ): Promise<Blob> {
   const { width, height } = rgba;
   const out = new OffscreenCanvas(width, height);
@@ -153,7 +154,16 @@ export async function exportImage(
     paintBackground(ctx, bg, width, height);
   }
   const data = new Uint8ClampedArray(rgba.data);
-  for (let i = 0, j = 3; i < mask.data.length; i++, j += 4) data[j] = mask.data[i];
+  for (let i = 0, p = 0; i < mask.data.length; i++, p += 4) {
+    const a = mask.data[i];
+    // Soft edges use the colours with the old backdrop's tint removed.
+    if (fg && a > 0 && a < 250) {
+      data[p] = fg[p];
+      data[p + 1] = fg[p + 1];
+      data[p + 2] = fg[p + 2];
+    }
+    data[p + 3] = a;
+  }
   const layer = new OffscreenCanvas(width, height);
   layer.getContext('2d')!.putImageData(new ImageData(data, width, height), 0, 0);
   ctx.drawImage(layer, 0, 0);

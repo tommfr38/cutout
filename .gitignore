@@ -42,3 +42,12 @@ next-env.d.ts
 
 # TypeScript incremental build state
 tsconfig.tsbuildinfo
+
+# downloaded by scripts/fetch-models.mjs
+/public/models/*/onnx/
+/public/__test/
+
+# benchmark downloads and results
+/bench/data/
+/bench/out/
+/bench/harness/app.js

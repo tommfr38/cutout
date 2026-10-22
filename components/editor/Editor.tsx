@@ -56,6 +56,12 @@ interface Doc {
   rgba: ImageData;
   originalAlpha: Uint8ClampedArray | null;
   mask: Mask;
+  /**
+   * Colours with a plain backdrop's tint removed from soft edges, from the
+   * last automatic removal. Shown only where a pixel is partly transparent,
+   * so undo and the restore brush always bring back the original colours.
+   */
+  fg: Uint8ClampedArray | null;
   composite: OffscreenCanvas;
   compositeCtx: OffscreenCanvasRenderingContext2D;
   compositeData: ImageData;
@@ -344,11 +350,20 @@ export default function Editor() {
     if (!r.w || !r.h) return;
     const d = doc.compositeData.data;
     const m = doc.mask.data;
+    const src = doc.rgba.data;
+    const fg = doc.fg;
     const w = doc.width;
     for (let y = r.y; y < r.y + r.h; y++) {
       const start = y * w + r.x;
       const end = start + r.w;
-      for (let i = start; i < end; i++) d[i * 4 + 3] = m[i];
+      for (let i = start; i < end; i++) {
+        const p = i * 4;
+        const colors = fg && m[i] > 0 && m[i] < 250 ? fg : src;
+        d[p] = colors[p];
+        d[p + 1] = colors[p + 1];
+        d[p + 2] = colors[p + 2];
+        d[p + 3] = m[i];
+      }
     }
     doc.compositeCtx.putImageData(doc.compositeData, 0, 0, r.x, r.y, r.w, r.h);
   }, []);
@@ -381,12 +396,24 @@ export default function Editor() {
       setNotice(null);
       setBusy({ label: 'Removing background…' });
       try {
-        const res = await client().removeBackground(autoModelInput(doc.rgba), (p) =>
+        const c = client();
+        const res = await c.removeBackground(autoModelInput(doc.rgba), (p) =>
           setBusy(progressToBusy(p, 'Removing background…')),
         );
         if (docRef.current !== doc) return;
+        setBusy({ label: 'Cleaning up the edges…' });
+        const refined = await c.refine(
+          { data: new Uint8ClampedArray(doc.rgba.data), width: doc.width, height: doc.height },
+          res,
+        );
+        if (docRef.current !== doc) return;
         const before = doc.mask.data.slice();
-        const rect = applyScaledMask(doc.mask, doc.originalAlpha, res, 'replace');
+        const mask = doc.mask.data;
+        const orig = doc.originalAlpha;
+        const alpha = refined.alpha;
+        for (let i = 0; i < mask.length; i++) mask[i] = orig ? (orig[i] * alpha[i]) / 255 : alpha[i];
+        doc.fg = refined.fg;
+        const rect = { x: 0, y: 0, w: doc.width, h: doc.height };
         composite(doc, rect);
         recordFullEdit(doc, before, rect, 'Auto remove');
         render();
@@ -508,6 +535,7 @@ export default function Editor() {
           rgba: img.rgba,
           originalAlpha: img.originalAlpha,
           mask,
+          fg: null,
           composite,
           compositeCtx,
           compositeData,
@@ -577,7 +605,7 @@ export default function Editor() {
     if (!doc || exporting) return;
     setExporting(true);
     try {
-      const blob = await exportImage(doc.rgba, doc.mask, bgRef.current, format);
+      const blob = await exportImage(doc.rgba, doc.mask, bgRef.current, format, doc.fg);
       const ext = format === 'jpeg' ? 'jpg' : format;
       downloadBlob(blob, `${baseName(doc.name)}-cutout.${ext}`);
     } catch (err) {
