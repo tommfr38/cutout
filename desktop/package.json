@@ -1,6 +1,6 @@
 {
   "name": "cutout-desktop",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "private": true,
   "description": "Cutout desktop app",
   "main": "main.js",
@@ -39,7 +39,11 @@
     "extraResources": [
       {
         "from": "../dist/client",
-        "to": "ui"
+        "to": "ui",
+        "filter": [
+          "**/*",
+          "!models/**"
+        ]
       },
       {
         "from": "models",
