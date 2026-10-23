@@ -50,8 +50,18 @@ cd desktop && npm ci && node scripts/fetch-model.mjs && npm start
 
 `npx electron-builder --mac` or `--win` produces the installers.
 [`.github/workflows/release.yml`](.github/workflows/release.yml) does that on
-every `v*` tag and attaches them to the release. The builds are not signed, so
-macOS and Windows both warn on first launch.
+every `v*` tag and attaches them to the release. Those CI builds are not
+signed, so macOS and Windows both warn on first launch.
+
+A Mac with a Developer ID Application certificate in its keychain signs the
+app and the DMG with the hardened runtime automatically. To notarize, store
+the credentials once and submit the DMG:
+
+```bash
+xcrun notarytool store-credentials cutout --apple-id <email> --team-id <team>
+xcrun notarytool submit release/Cutout-mac-universal.dmg --keychain-profile cutout --wait
+xcrun stapler staple release/Cutout-mac-universal.dmg
+```
 
 ## Hosting
 

@@ -63,11 +63,15 @@
           ]
         }
       ],
-      "identity": null,
       "files": [
         "!node_modules/onnxruntime-node/bin/napi-v3/win32/**"
       ],
-      "artifactName": "Cutout-mac-universal.${ext}"
+      "artifactName": "Cutout-mac-universal.${ext}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": false
     },
     "win": {
       "target": [
@@ -88,6 +92,9 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "shortcutName": "Cutout"
+    },
+    "dmg": {
+      "sign": true
     }
   }
 }
