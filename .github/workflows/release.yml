@@ -90,11 +90,14 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: 28A8BY4QDB
         run: |
-          auth=(--apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID")
+          # Pasted secrets can pick up stray whitespace; neither value has any.
+          apple_id=$(printf %s "$APPLE_ID" | tr -d '[:space:]')
+          password=$(printf %s "$APPLE_APP_SPECIFIC_PASSWORD" | tr -d '[:space:]')
+          auth=(--apple-id "$apple_id" --password "$password" --team-id "$APPLE_TEAM_ID")
           xcrun notarytool submit Cutout-mac-universal.dmg "${auth[@]}" --wait --output-format json | tee /tmp/notary.json
-          id=$(jq -r .id /tmp/notary.json)
-          if [ "$(jq -r .status /tmp/notary.json)" != "Accepted" ]; then
-            xcrun notarytool log "$id" "${auth[@]}" || true
+          id=$(jq -r '.id // empty' /tmp/notary.json)
+          if [ "$(jq -r '.status // empty' /tmp/notary.json)" != "Accepted" ]; then
+            if [ -n "$id" ]; then xcrun notarytool log "$id" "${auth[@]}" || true; fi
             exit 1
           fi
           xcrun stapler staple Cutout-mac-universal.dmg
