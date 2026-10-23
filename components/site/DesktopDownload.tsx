@@ -82,7 +82,8 @@ export default function DesktopDownload() {
             <Code2 size={15} /> View the source code
           </a>
           <span className="app-caveat">
-            The builds are not signed, so your system asks you to confirm the first time.
+            The Mac app is notarized by Apple. The Windows build is not signed yet, so
+            Windows asks you to confirm the first time.
           </span>
         </div>
       )}
