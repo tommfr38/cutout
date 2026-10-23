@@ -25,8 +25,10 @@ jobs:
       # The interface is bundled as static files; the desktop app serves them
       # from its own root, so there is no asset prefix.
       STATIC_EXPORT: '1'
-      # Nothing to sign with, so do not go looking for a certificate.
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      # Only the Mac build is signed, and only when the certificate secret is
+      # there; Windows has no certificate, so it never looks for one.
+      MAC_SIGNING: ${{ matrix.os == 'macos-latest' && secrets.MAC_CERT_P12 != '' }}
+      CSC_IDENTITY_AUTO_DISCOVERY: ${{ matrix.os == 'macos-latest' && secrets.MAC_CERT_P12 != '' }}
       # Also exercise the Smart Brush, which proves its model really is
       # bundled rather than quietly downloaded.
       CUTOUT_SMOKE_SMART: '1'
@@ -49,9 +51,43 @@ jobs:
         working-directory: desktop
         run: node scripts/fetch-model.mjs
 
+      - name: Refuse to release an unsigned Mac app
+        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/') && env.MAC_SIGNING != 'true'
+        run: |
+          echo "::error::MAC_CERT_P12 is not set, so this release would ship an unnotarized Mac app."
+          exit 1
+
       - name: Package
         working-directory: desktop
+        env:
+          # electron-builder imports these into a temporary keychain and signs
+          # the app and the DMG with the hardened runtime.
+          CSC_LINK: ${{ runner.os == 'macOS' && secrets.MAC_CERT_P12 || '' }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.MAC_CERT_PASSWORD || '' }}
         run: npx electron-builder ${{ matrix.platform }} --publish never
+
+      - name: Notarize (macOS)
+        if: runner.os == 'macOS' && env.MAC_SIGNING == 'true'
+        working-directory: desktop/release
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: 28A8BY4QDB
+        run: |
+          auth=(--apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID")
+          xcrun notarytool submit Cutout-mac-universal.dmg "${auth[@]}" --wait --output-format json | tee /tmp/notary.json
+          id=$(jq -r .id /tmp/notary.json)
+          if [ "$(jq -r .status /tmp/notary.json)" != "Accepted" ]; then
+            xcrun notarytool log "$id" "${auth[@]}" || true
+            exit 1
+          fi
+          xcrun stapler staple Cutout-mac-universal.dmg
+          xcrun stapler staple mac-universal/Cutout.app
+          # Judge the DMG the way a downloaded copy is judged.
+          xattr -w com.apple.quarantine "0081;$(printf %x "$(date +%s)");Safari;" Cutout-mac-universal.dmg
+          spctl -a -vv -t open --context context:primary-signature Cutout-mac-universal.dmg
+          spctl -a -vv mac-universal/Cutout.app
+          xattr -d com.apple.quarantine Cutout-mac-universal.dmg
 
       - name: Check the packaged app removes a background (macOS)
         if: runner.os == 'macOS'
