@@ -57,13 +57,29 @@ jobs:
           echo "::error::MAC_CERT_P12 is not set, so this release would ship an unnotarized Mac app."
           exit 1
 
+      # electron-builder's own import fails to unlock its keychain on these
+      # runners, so import the certificate into a keychain of our own; it then
+      # finds the identity and signs the app and DMG with the hardened runtime.
+      - name: Import the signing certificate (macOS)
+        if: runner.os == 'macOS' && env.MAC_SIGNING == 'true'
+        env:
+          MAC_CERT_P12: ${{ secrets.MAC_CERT_P12 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          pass=$(openssl rand -hex 24)
+          echo "$MAC_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$pass" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$pass" "$keychain"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$pass" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/cert.p12"
+          security find-identity -v -p codesigning "$keychain"
+
       - name: Package
         working-directory: desktop
-        env:
-          # electron-builder imports these into a temporary keychain and signs
-          # the app and the DMG with the hardened runtime.
-          CSC_LINK: ${{ runner.os == 'macOS' && secrets.MAC_CERT_P12 || '' }}
-          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.MAC_CERT_PASSWORD || '' }}
         run: npx electron-builder ${{ matrix.platform }} --publish never
 
       - name: Notarize (macOS)
